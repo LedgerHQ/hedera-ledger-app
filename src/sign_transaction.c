@@ -515,7 +515,7 @@ void reformat_memo() {
         ctx.full,
         MAX_MEMO_SIZE,
         "%s",
-        ctx.transaction.memo
+        ctx.transaction.memo || ""
     );
 
     if (strlen(ctx.full) > MAX_MEMO_SIZE) {
