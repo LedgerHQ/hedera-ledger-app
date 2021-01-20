@@ -20,7 +20,8 @@ enum TransactionType
     Verify = 0,
     Create = 1,
     Transfer = 2,
-    Associate = 3
+    Associate = 3,
+    TokenTransfer = 4
 };
 
 #if defined(TARGET_NANOS)

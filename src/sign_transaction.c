@@ -23,6 +23,7 @@ static struct sign_tx_context_t
     uint32_t key_index;
     uint8_t transfer_to_index;
     uint8_t transfer_from_index;
+    uint8_t decimals;
 
     // Transaction Summary
     char summary_line_1[DISPLAY_SIZE + 1];
@@ -46,7 +47,6 @@ static struct sign_tx_context_t
     HederaTransactionBody transaction;
 } ctx;
 
-// UI Definition for Nano S
 // Step 1: Transaction Summary
 static const bagl_element_t ui_tx_summary_step[] = {
     UI_BACKGROUND(),
@@ -565,6 +565,15 @@ void reformat_amount()
             "%s hbar",
             hedera_format_tinybar(ctx.transaction.data.cryptoTransfer.transfers.accountAmounts[ctx.transfer_to_index].amount));
         break;
+    case TokenTransfer:
+        hedera_snprintf(
+            ctx.full,
+            DISPLAY_SIZE * 3,
+            "%s",
+            hedera_format_token(
+                ctx.transaction.data.cryptoTransfer.tokenTransfers[0].accountAmounts[ctx.transfer_to_index].amount,
+                ctx.decimals));
+        break;
     }
 
     count_screens();
@@ -659,6 +668,10 @@ void handle_transaction_body()
             "Create Account");
         break;
 
+    case HederaTransactionBody_tokenAssociate_tag:
+        ctx.type = Associate;
+        break;
+
     case HederaTransactionBody_cryptoTransfer_tag:
     {
         // Transfer Transaction
@@ -666,6 +679,21 @@ void handle_transaction_body()
         {
             // Unsupported (number of accounts > 2)
             THROW(EXCEPTION_MALFORMED_APDU);
+        }
+
+        if (ctx.transaction.data.cryptoTransfer.tokenTransfers_count > 1)
+        {
+            // Unsupported (number of tokens transferred > 1)
+            THROW(EXCEPTION_MALFORMED_APDU);
+        }
+
+        if (ctx.transaction.data.cryptoTransfer.tokenTransfers_count == 1)
+        {
+            if (ctx.transaction.data.cryptoTransfer.tokenTransfers[0].accountAmounts_count > 2)
+            {
+                // Unsupported (token transfer between more than 2 accounts)
+                THROW(EXCEPTION_MALFORMED_APDU);
+            }
         }
 
         if ( // Only 1 Account (Sender), Fee 1 Tinybar, and Value 0 Tinybar
@@ -680,8 +708,11 @@ void handle_transaction_body()
                 DISPLAY_SIZE,
                 "Verify Account");
         }
-        else
-        { // Number of Accounts == 2
+        else if (
+            ctx.transaction.data.cryptoTransfer.transfers.accountAmounts_count == 2 &&
+            ctx.transaction.data.cryptoTransfer.tokenTransfers_count == 0)
+        {
+            // Number of Accounts == 2
             // Some other Transfer Transaction
             // Determine Sender based on amount
             ctx.type = Transfer;
@@ -689,7 +720,7 @@ void handle_transaction_body()
             hedera_snprintf(
                 ctx.summary_line_1,
                 DISPLAY_SIZE,
-                "Transfer");
+                "Transfer Hbar");
 
             ctx.transfer_to_index = 1;
             ctx.transfer_from_index = 0;
@@ -697,6 +728,28 @@ void handle_transaction_body()
             {
                 ctx.transfer_to_index = 0;
                 ctx.transfer_from_index = 1;
+            }
+        }
+        else if (
+            ctx.transaction.data.cryptoTransfer.tokenTransfers_count == 1 &&
+            ctx.transaction.data.cryptoTransfer.transfers.accountAmounts_count == 0)
+        {
+            ctx.type = TokenTransfer;
+
+            hedera_sprintf(
+                ctx.summary_line_1,
+                DISPLAY_SIZE * 2,
+                "Transfer %llu.%llu.%llu",
+                ctx.transaction.data.cryptoTransfer.tokenTransfers[0].token.shardNum,
+                ctx.transaction.data.cryptoTransfer.tokenTransfers[0].token.realmNum,
+                ctx.transaction.data.cryptoTransfer.tokenTransfers[0].token.tokenNum);
+
+            ctx.transfer_from_index = 0;
+            ctx.transfer_to_index = 1;
+            if (ctx.transaction.data.cryptoTransfer.tokenTransfers[0].accountAmounts[0].amount > 0)
+            {
+                ctx.transfer_from_index = 1;
+                ctx.transfer_to_index = 0;
             }
         }
     }
@@ -718,6 +771,7 @@ static struct sign_tx_context_t
     uint32_t key_index;
     uint8_t transfer_from_index;
     uint8_t transfer_to_index;
+    uint8_t decimals;
 
     // Transaction Summary
     char summary_line_1[DISPLAY_SIZE + 1];
@@ -749,8 +803,6 @@ static struct sign_tx_context_t
     // Parsed transaction
     HederaTransactionBody transaction;
 } ctx;
-
-// UI Definition for Nano X
 
 // Confirm Callback
 unsigned int io_seproxyhal_tx_approve(const bagl_element_t *e)
@@ -852,7 +904,7 @@ UX_DEF(
     &ux_tx_flow_8_step,
     &ux_tx_flow_9_step);
 
-// Verify UX Flow
+// Verify / Associate UX Flow
 UX_DEF(
     ux_verify_flow,
     &ux_tx_flow_1_step,
@@ -932,6 +984,23 @@ void handle_transaction_body()
 
     case HederaTransactionBody_tokenAssociate_tag:
         ctx.type = Associate;
+
+        hedera_sprintf(
+            ctx.summary_line_1,
+            "Associate Token");
+
+        hedera_sprintf(
+            ctx.senders_title,
+            "Token");
+
+        hedera_snprintf(
+            ctx.senders,
+            DISPLAY_SIZE * 2,
+            "%llu.%llu.%llu",
+            ctx.transaction.data.cryptoTransfer.tokenTransfers[0].tokenID.shardNum,
+            ctx.transaction.data.cryptoTransfer.tokenTransfers[0].tokenID.realmNum,
+            ctx.transaction.data.cryptoTransfer.tokenTransfers[0].tokenID.accountNum);
+
         break;
 
     case HederaTransactionBody_cryptoTransfer_tag:
@@ -949,10 +1018,13 @@ void handle_transaction_body()
             THROW(EXCEPTION_MALFORMED_APDU);
         }
 
-        if (ctx.transaction.data.cryptoTransfer.tokenTransfers.accountAmounts_count > 2)
+        if (ctx.transaction.data.cryptoTransfer.tokenTransfers_count == 1)
         {
-            // Unsupported (token transfer between more than 2 accounts)
-            THROW(EXCEPTION_MALFORMED_APDU);
+            if (ctx.transaction.data.cryptoTransfer.tokenTransfers[0].accountAmounts_count > 2)
+            {
+                // Unsupported (token transfer between more than 2 accounts)
+                THROW(EXCEPTION_MALFORMED_APDU);
+            }
         }
 
         if ( // Only 1 Account (Sender), Fee 1 Tinybar, and Value 0 Tinybar
@@ -965,9 +1037,11 @@ void handle_transaction_body()
             hedera_sprintf(
                 ctx.summary_line_1,
                 "Verify Account");
+
             hedera_sprintf(
                 ctx.senders_title,
                 "Account");
+
             hedera_snprintf(
                 ctx.senders,
                 DISPLAY_SIZE * 2,
@@ -975,6 +1049,7 @@ void handle_transaction_body()
                 ctx.transaction.data.cryptoTransfer.transfers.accountAmounts[0].accountID.shardNum,
                 ctx.transaction.data.cryptoTransfer.transfers.accountAmounts[0].accountID.realmNum,
                 ctx.transaction.data.cryptoTransfer.transfers.accountAmounts[0].accountID.accountNum);
+
             hedera_snprintf(
                 ctx.amount,
                 DISPLAY_SIZE * 2,
@@ -1008,6 +1083,7 @@ void handle_transaction_body()
                 ctx.transaction.data.cryptoTransfer.transfers.accountAmounts[ctx.transfer_from_index].accountID.shardNum,
                 ctx.transaction.data.cryptoTransfer.transfers.accountAmounts[ctx.transfer_from_index].accountID.realmNum,
                 ctx.transaction.data.cryptoTransfer.transfers.accountAmounts[ctx.transfer_from_index].accountID.accountNum);
+
             hedera_snprintf(
                 ctx.recipients,
                 DISPLAY_SIZE * 2,
@@ -1015,6 +1091,7 @@ void handle_transaction_body()
                 ctx.transaction.data.cryptoTransfer.transfers.accountAmounts[ctx.transfer_to_index].accountID.shardNum,
                 ctx.transaction.data.cryptoTransfer.transfers.accountAmounts[ctx.transfer_to_index].accountID.realmNum,
                 ctx.transaction.data.cryptoTransfer.transfers.accountAmounts[ctx.transfer_to_index].accountID.accountNum);
+
             hedera_snprintf(
                 ctx.amount,
                 DISPLAY_SIZE * 2,
@@ -1023,9 +1100,9 @@ void handle_transaction_body()
         }
         else if (
             ctx.transaction.data.cryptoTransfer.tokenTransfers_count == 1 &&
-            ctx.transaction.data.cryptoTransfer.transfers == NULL)
+            ctx.transaction.data.cryptoTransfer.transfers.accountAmounts_count == 0)
         {
-            ctx.type = Transfer;
+            ctx.type = TokenTransfer;
 
             hedera_sprintf(
                 ctx.summary_line_1,
@@ -1043,26 +1120,29 @@ void handle_transaction_body()
                 ctx.transfer_to_index = 0;
             }
 
-            // TODO
             hedera_snprintf(
                 ctx.senders,
                 DISPLAY_SIZE * 2,
                 "%llu.%llu.%llu",
-                ctx.transaction.data.cryptoTransfer.transfers.accountAmounts[ctx.transfer_from_index].accountID.shardNum,
-                ctx.transaction.data.cryptoTransfer.transfers.accountAmounts[ctx.transfer_from_index].accountID.realmNum,
-                ctx.transaction.data.cryptoTransfer.transfers.accountAmounts[ctx.transfer_from_index].accountID.accountNum);
+                ctx.transaction.data.cryptoTransfer.tokenTransfers[0].accountAmounts[ctx.transfer_from_index].accountID.shardNum,
+                ctx.transaction.data.cryptoTransfer.tokenTransfers[0].accountAmounts[ctx.transfer_from_index].accountID.realmNum,
+                ctx.transaction.data.cryptoTransfer.tokenTransfers[0].accountAmounts[ctx.transfer_from_index].accountID.accountNum);
+
             hedera_snprintf(
                 ctx.recipients,
                 DISPLAY_SIZE * 2,
                 "%llu.%llu.%llu",
-                ctx.transaction.data.cryptoTransfer.transfers.accountAmounts[ctx.transfer_to_index].accountID.shardNum,
-                ctx.transaction.data.cryptoTransfer.transfers.accountAmounts[ctx.transfer_to_index].accountID.realmNum,
-                ctx.transaction.data.cryptoTransfer.transfers.accountAmounts[ctx.transfer_to_index].accountID.accountNum);
+                ctx.transaction.data.cryptoTransfer.tokenTransfers[0].accountAmounts[ctx.transfer_to_index].accountID.shardNum,
+                ctx.transaction.data.cryptoTransfer.tokenTransfers[0].accountAmounts[ctx.transfer_to_index].accountID.realmNum,
+                ctx.transaction.data.cryptoTransfer.tokenTransfers[0].accountAmounts[ctx.transfer_to_index].accountID.accountNum);
+
             hedera_snprintf(
                 ctx.amount,
                 DISPLAY_SIZE * 2,
-                "%s hbar",
-                hedera_format_tinybar(ctx.transaction.data.cryptoTransfer.transfers.accountAmounts[ctx.transfer_to_index].amount));
+                "%s",
+                hedera_format_token(
+                    ctx.transaction.data.cryptoTransfer.tokenTransfers[0].accountAmounts[ctx.transfer_to_index].amount,
+                    ctx.decimals));
         }
     }
     break;
@@ -1084,6 +1164,12 @@ void handle_transaction_body()
     case Transfer:
         ux_flow_init(0, ux_transfer_flow, NULL);
         break;
+    case Associate:
+        ux_flow_init(0, ux_verify_flow, NULL);
+        break;
+    case TokenTransfer:
+        ux_flow_init(0, ux_transfer_flow, NULL);
+        break;
     }
 }
 #endif
@@ -1098,9 +1184,17 @@ void handle_sign_transaction(
     /* out */ volatile unsigned int *flags,
     /* out */ volatile unsigned int *tx)
 {
-    UNUSED(p1);
     UNUSED(p2);
     UNUSED(tx);
+
+    if (p1 != NULL)
+    {
+        ctx.decimals = p1;
+    }
+    else
+    {
+        ctx.decimals = 0;
+    }
 
     // Key Index
     ctx.key_index = U4LE(buffer, 0);

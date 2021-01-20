@@ -6,7 +6,9 @@
         "*.h": "c",
         ".clang-tidy": "yaml",
         "string_view": "c",
-        "regex": "c"
+        "regex": "c",
+        "cmath": "c",
+        "*.tcc": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
 }
