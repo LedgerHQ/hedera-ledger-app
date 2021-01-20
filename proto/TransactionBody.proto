@@ -4,6 +4,7 @@ import "nanopb.proto";
 import "BasicTypes.proto";
 import "CryptoCreateTransactionBody.proto";
 import "CryptoTransferTransactionBody.proto";
+import "TokenAssociateBody.proto";
 
 message HederaTransactionBody {
     HederaTransactionID transactionID = 1;
@@ -12,5 +13,6 @@ message HederaTransactionBody {
     oneof data {
         HederaCryptoCreateTransactionBody cryptoCreateAccount = 11;
         HederaCryptoTransferTransactionBody cryptoTransfer = 14;
+        HederaTokenAssociateBody tokenAssociate = 40;
     }
 }

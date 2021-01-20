@@ -12,6 +12,12 @@ message HederaTransferList {
     repeated HederaAccountAmount accountAmounts = 1 [(nanopb).max_count = 2];
 }
 
+message HederaTokenTransferList {
+    HederaTokenID token = 1;
+    repeated HederaAccountAmount accountAmounts = 2 [(nanopb).max_count = 2];
+}
+
 message HederaCryptoTransferTransactionBody {
     HederaTransferList transfers = 1;
+    repeated HederaTokenTransferList tokenTransfers = 2 [(nanopb).max_count = 1];
 }
