@@ -11,9 +11,6 @@
 #define MAX_MEMO_SIZE 200
 #define SIGNATURE_SIZE 32
 
-#define HBAR 100000000 // tinybar
-#define HBAR_BUF_SIZE 26
-
 #define CLA 0xE0
 
 // These are the offsets of various parts of a request APDU packet.

@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "app-hedera"
+version = "1.0.1"
+description = "Hedera Hashgraph BOLOS app"
+authors = ["Chris Campbell <chris@launchbadge.com>"]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+
+[tool.poetry.dev-dependencies]
+certifi = "^2020.12.5"
+ECPy = "^1.2.5"
+future = "^0.18.2"
+hidapi = "^0.10.1"
+idna = "^2.10"
+ledgerblue = "^0.1.34"
+Pillow = "^8.0.1"
+protobuf = "^3.14.0"
+pycryptodomex = "^3.9.9"
+python-u2flib-host = "^3.0.3"
+requests = "^2.25.0"
+six = "^1.15.0"
+urllib3 = "^1.26.2"
+websocket_client = "^0.57.0"
+pylama = "^7.7.1"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
